@@ -68,7 +68,7 @@ package_version_ch<-function(pkg){
   as.character(u)
 }
 
-libraries<-data.frame(Version=sapply(names(libraries),package_version_ch))
+libraries<-data.frame(Version=sapply(sort(names(libraries)),package_version_ch))
 
 kable(libraries, caption = "Libraries loaded")
 ```
@@ -120,9 +120,9 @@ validating<-training[-inTrain,]
 
 ```
 
-<!-- Reviewing data -->
-<!-- `GGally` package help us to visualize the relation between predictors and response variable. -->
-```{r ggpair_plot,include=FALSE, fig.cap='Visualizing variables.',message=FALSE, fig.align='center', fig.width=12, fig.height=12}
+## Reviewing data
+`GGally` package help us to visualize the relation between predictors and response variable.
+```{r ggpair_plot,echo=TRUE, fig.cap='Visualizing variables.',message=FALSE, fig.align='center', fig.width=12, fig.height=12}
 ggpairs(training[,c(1:5,53)], aes(colour=classe, alpha=0.4)) 
 ```
 
@@ -130,7 +130,7 @@ ggpairs(training[,c(1:5,53)], aes(colour=classe, alpha=0.4))
 
 ## Training and evaluating models
 
-In order to obtain the best prediction over validating and testing data, three models were evaluated. Decision three, naive Bayes and random forest were selected. System time employed for every model training was recorded. As it can be seen in next table, both naive Bayes and random forest modeling are high system time consuming. 
+In order to obtain the best prediction over validating and testing data, three models were evaluated. Decision three, naive Bayes and random forest were selected. 
 
 ```{r,echo=TRUE,message=FALSE}
 cl<-makePSOCKcluster(3)
@@ -157,15 +157,16 @@ rf_time<-system.time(
 stopCluster(cl)
 ```
 
-```{r system_time,echo=TRUE}
+```{r system_time,include=FALSE}
 system_times<-data.frame(user=c(rpart_time[[1]],nb_time[[1]],rf_time[[1]]),
                             system=c(rpart_time[[2]],nb_time[[2]],rf_time[[2]]),
                             elapsed=c(rpart_time[[3]],nb_time[[3]],rf_time[[3]]),
                          row.names = c("RPART","NB","RF") )
 kable(system_times, caption = "System time consumption")
 ```
+System time employed for every model training was recorded. Both naive Bayes (`r nb_time[[3]]`s) and random forest (`r rf_time[[3]]` s) modeling are high system time consuming.
 
-To select the best model for our purpose, the `resample` function of the `caret` package was employed, and it is showed in the following figure that the random forest model is far better than naive Bayes and decision tree models with an accuracy close to 1. In following section the accuracy of the selected model is evaluated over no used data. 
+To select the best model for our purpose, the `resample` function of the `caret` package was employed, and it is showed in the following figure that the random forest model is far better than naive Bayes and decision tree models with an accuracy close to 1. In the next section the accuracy of the selected model is evaluated over no used data. 
 
 ```{r,echo=TRUE}
 models_compare<-resamples(list(RPART=modFit_rpart,NB=modFit_nb,RF=modFit_rf))
