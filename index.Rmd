@@ -1,32 +1,210 @@
 ---
-title: "Practical Learning Machine Project"
+title: "Practical Learning Machine Course Project"
 author: "Álvaro Sánchez Rodríguez"
 date: "7/4/2020"
+bibliography: bibliography.bib
 output: 
   html_document: 
-    keep_md: yes
+    number_sections: yes
+    theme: cerulean
+    toc: yes
+    toc_float: 
+      collapsed: false
+  word_document:
+    toc: yes
 ---
 
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-## R Markdown
+# Background
 
-This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+Using devices such as Jawbone Up, Nike FuelBand, and Fitbit it is now possible to collect a large amount of data about personal activity relatively inexpensively. These type of devices are part of the quantified self movement – a group of enthusiasts who take measurements about themselves regularly to improve their health, to find patterns in their behavior, or because they are tech geeks. One thing that people regularly do is quantify how much of a particular activity they do, but they rarely quantify how well they do it. In this project, your goal will be to use data from accelerometers on the belt, forearm, arm, and dumbell of 6 participants. They were asked to perform barbell lifts correctly and incorrectly in 5 different ways. More information is available from the website here: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>
 
-When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+The training data for this project are available here:
 
-```{r cars}
-summary(cars)
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv>
+
+The test data are available here:
+
+<https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv>
+
+The data for this project come from this source: <http://web.archive.org/web/20161224072740/http:/groupware.les.inf.puc-rio.br/har>. If you use the document you create for this class for any purpose please cite them as they have been very generous in allowing their data to be used for this kind of assignment [@cita].
+
+# System Information and libraries
+
+As no English native speaker, local configuration is changed to `en_US.UTF-8`:
+```{r, results='hide',include=FALSE}
+setwd("/mnt/3E34205A4A3C9D3E/cursos/R/Practical Learning Machine/Project")
+Sys.setlocale("LC_TIME", "en_US.UTF-8")
 ```
 
-## Including Plots
+In order to replicate or reproduce the analyses, system information is supplied:
 
-You can also embed plots, for example:
+```{r, include=FALSE}
+info=R.Version()
+```
+1. Platform: `r info$platform`
+2. R version: `r info$version.string`
+3. Date: `r Sys.Date()`
 
-```{r pressure, echo=FALSE}
-plot(pressure)
+Finally, libraries used are also reported:
+
+```{r libraries_loaded, echo=FALSE, message=FALSE}
+libraries_load=c("ggplot2","dplyr","GGally","lubridate","httr","caret","doParallel",
+                 "randomForest","randomForestExplainer","skimr","knitr")
+ipak <- function(pkg){
+  new.pkg <- pkg[!(pkg %in% installed.packages()[, "Package"])]
+  if (length(new.pkg)) 
+    install.packages(new.pkg, dependencies = TRUE)
+  sapply(pkg, require, character.only = TRUE)
+}
+
+libraries<-ipak(libraries_load)
+
+package_version_ch<-function(pkg){
+  u<-packageVersion(pkg)
+  as.character(u)
+}
+
+libraries<-data.frame(Version=sapply(names(libraries),package_version_ch))
+
+kable(libraries, caption = "Libraries loaded")
 ```
 
-Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+# Data
+
+## Loading data
+```{r,echo=TRUE,results='hide'}
+
+GET("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-training.csv", 
+    write_disk(training <- tempfile(fileext = ".csv")))
+GET("https://d396qusza40orc.cloudfront.net/predmachlearn/pml-testing.csv", 
+    write_disk(testing <- tempfile(fileext = ".csv")))
+
+training<-read.csv(training)
+testing<-read.csv(testing)
+
+```
+
+## Cleaning data
+
+First of all, some time was invested to review variables in the data frame and delete some of them not useful for modeling (nzv, NA variables, etc...). Skimr package can help us to visualize each variable `skim(training)`.
+
+```{r,echo=TRUE,results='hide'}
+#removing time, window, ... variables
+training<-training[,-grep("user_name|*time*|*window*|X",names(training))]
+
+#removing near zero variables
+ind=nearZeroVar(training,saveMetrics = TRUE)
+training<-training[,!(ind$nzv) & !(ind$zeroVar)]
+
+#removing NA variables
+NAratio<-function(x){sum(is.na(x))}
+ind<-apply(training,2,NAratio)
+training<-training[,which(ind<0.5*nrow(training))]
+
+skim(training)
+
+```
+
+## Splitting data
+Training data was split in two sets (training and validating) in order to evaluate the performance of the selected model over not previously data used for training. 
+
+```{r,echo=TRUE, message=FALSE, results='hide'}
+set.seed(555)
+inTrain<-createDataPartition(training$classe,p=0.6,list = FALSE)
+training<-training[inTrain,]
+validating<-training[-inTrain,]
+
+```
+
+<!-- Reviewing data -->
+<!-- `GGally` package help us to visualize the relation between predictors and response variable. -->
+```{r ggpair_plot,include=FALSE, fig.cap='Visualizing variables.',message=FALSE, fig.align='center', fig.width=12, fig.height=12}
+ggpairs(training[,c(1:5,53)], aes(colour=classe, alpha=0.4)) 
+```
+
+# Modeling
+
+## Training and evaluating models
+
+In order to obtain the best prediction over validating and testing data, three models were evaluated. Decision three, naive Bayes and random forest were selected. System time employed for every model training was recorded. As it can be seen in next table, both naive Bayes and random forest modeling are high system time consuming. 
+
+```{r,echo=TRUE,message=FALSE}
+cl<-makePSOCKcluster(3)
+registerDoParallel(cl)
+
+fitControl<-trainControl(method = "repeatedcv",number = 5, allowParallel = TRUE)
+
+
+rpart_time<-system.time(
+  modFit_rpart<-train(classe~.,data = training,method="rpart",
+                      trControl=fitControl)
+)
+
+nb_time<-system.time(
+  modFit_nb<-train(classe~.,data = training,method="nb",
+                   trControl=fitControl)
+)
+
+rf_time<-system.time(
+ modFit_rf<-train(classe~.,data = training,method="rf",ntree=300, metric="Accuracy",
+                   trControl=fitControl,localImp = TRUE)
+)
+
+stopCluster(cl)
+```
+
+```{r system_time,echo=TRUE}
+system_times<-data.frame(user=c(rpart_time[[1]],nb_time[[1]],rf_time[[1]]),
+                            system=c(rpart_time[[2]],nb_time[[2]],rf_time[[2]]),
+                            elapsed=c(rpart_time[[3]],nb_time[[3]],rf_time[[3]]),
+                         row.names = c("RPART","NB","RF") )
+kable(system_times, caption = "System time consumption")
+```
+
+To select the best model for our purpose, the `resample` function of the `caret` package was employed, and it is showed in the following figure that the random forest model is far better than naive Bayes and decision tree models with an accuracy close to 1. In following section the accuracy of the selected model is evaluated over no used data. 
+
+```{r,echo=TRUE}
+models_compare<-resamples(list(RPART=modFit_rpart,NB=modFit_nb,RF=modFit_rf))
+```
+
+```{r models_comp_fig,echo=TRUE, fig.cap="Model comparison",fig.width=5, fig.align='center'}
+scales <- list(x=list(relation="free"), y=list(relation="free"))
+bwplot(models_compare, scales=scales)
+```
+
+Finally, the next figure shows the most important variables extracted from the random forest model built. For more advance information about the random forest model use the `randomForestExplainer` package (`explain_forest(modFit_rf$finalModel,interactions=FALSE,data=training)`).   
+
+```{r varimp_fig, echo=TRUE, fig.cap="Variables sorted by importance for RF model",fig.width=5, fig.align='center'}
+varImpPlot(modFit_rf$finalModel,type=1, main="Variable importance",n.var=15)
+```
+
+
+## Validating the model selected {#validation}
+
+As it can see in the next table, the random forest model gets an excellent accuracy over validating data, so it can be expected the same behavior over testing data (see table in results section). 
+
+```{r validation_table, echo=TRUE,message=FALSE}
+CM<-as.matrix(confusionMatrix(validating$classe,predict(modFit_rf,validating)),what = "overall")
+CM<-data.frame(Statistics=CM)
+kable(CM,caption = "Accuracy of the RF model over validation data set")
+```
+
+# Results over testing data
+
+The results obtained for the testing data are show in the following table. 
+
+```{r results_tab, echo=TRUE}
+testing$predict<-predict(modFit_rf,testing)
+results<-as.data.frame(t(as.matrix(testing[,161])))
+colnames(results)<-testing[,160]
+kable(results,caption="Results",row.names=TRUE)
+```
+
+# References
+
+
+
