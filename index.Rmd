@@ -90,7 +90,7 @@ testing<-read.csv(testing)
 
 ## Cleaning data
 
-First of all, some time was invested to review variables in the data frame and delete some of them not useful for modeling (nzv, NA variables, etc...). Skimr package can help us to visualize each variable `skim(training)`.
+First of all, some time was invested to review variables and to delete those which are not useful for modeling (nzv, NA variables, etc...). Skimr package can help us to visualize each variable `skim(training)`.
 
 ```{r,echo=TRUE,results='hide'}
 #removing time, window, ... variables
@@ -110,7 +110,7 @@ skim(training)
 ```
 
 ## Splitting data
-Training data was split in two sets (training and validating) in order to evaluate the performance of the selected model over not previously data used for training. 
+Training data was split in two sets (training and validating) in order to evaluate the performance of the selected model over data not previously used for training. 
 
 ```{r,echo=TRUE, message=FALSE, results='hide'}
 set.seed(555)
@@ -121,9 +121,10 @@ validating<-training[-inTrain,]
 ```
 
 ## Reviewing data
-`GGally` package help us to visualize the relation between predictors and response variable.
+`GGally` package help us to visualize the relation between predictors and response variable. It can be observed differences between `classe` factors for some variables which will be surely used in the modeling section.   
 ```{r ggpair_plot,echo=TRUE, fig.cap='Visualizing variables.',message=FALSE, fig.align='center', fig.width=12, fig.height=12}
-ggpairs(training[,c(1:5,53)], aes(colour=classe, alpha=0.4)) 
+ind<-grep("roll*|pitch*|classe",names(training))
+ggpairs(training[,ind], aes(colour=classe, alpha=0.4)) 
 ```
 
 # Modeling
@@ -164,9 +165,9 @@ system_times<-data.frame(user=c(rpart_time[[1]],nb_time[[1]],rf_time[[1]]),
                          row.names = c("RPART","NB","RF") )
 kable(system_times, caption = "System time consumption")
 ```
-System time employed for every model training was recorded. Both naive Bayes (`r nb_time[[3]]`s) and random forest (`r rf_time[[3]]` s) modeling are high system time consuming.
+System time employed for every model training was recorded. Both naive Bayes (`r nb_time[[3]]` s) and random forest (`r rf_time[[3]]` s) modeling are high system time consuming.
 
-To select the best model for our purpose, the `resample` function of the `caret` package was employed, and it is showed in the following figure that the random forest model is far better than naive Bayes and decision tree models with an accuracy close to 1. In the next section the accuracy of the selected model is evaluated over no used data. 
+To select the best model for our purpose, the `resample` function of the `caret` package was employed. How it is showed in the following figure, the random forest model, with an accuracy close to 1, is far better than naive Bayes and decision tree models. In the next section the accuracy of the selected model is evaluated over no used data. 
 
 ```{r,echo=TRUE}
 models_compare<-resamples(list(RPART=modFit_rpart,NB=modFit_nb,RF=modFit_rf))
@@ -196,7 +197,7 @@ kable(CM,caption = "Accuracy of the RF model over validation data set")
 
 # Results over testing data
 
-The results obtained for the testing data are show in the following table. 
+Finally, the random forest model is used to predict results over testing data set. Next table shows the results obtained. 
 
 ```{r results_tab, echo=TRUE}
 testing$predict<-predict(modFit_rf,testing)
