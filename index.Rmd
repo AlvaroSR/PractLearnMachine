@@ -1,15 +1,16 @@
 ---
 title: "Practical Learning Machine Course Project"
 author: "Álvaro Sánchez Rodríguez"
-date: "7/4/2020"
+date: "9/4/2020"
 bibliography: bibliography.bib
 output: 
-  html_document: 
+  html_document:
     number_sections: yes
     theme: cerulean
     toc: yes
     toc_float: 
       collapsed: false
+    keep_md: yes
   word_document:
     toc: yes
 ---
